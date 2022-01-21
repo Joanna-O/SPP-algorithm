@@ -1,0 +1,253 @@
+import re
+import numpy as np
+import math
+
+path_pomiar = 'BFN15180648_18-11-2021_09-55-42.gps'
+
+pomiar_list = [] # to bedzie lista list
+rangea_list =[] # lista list
+satxyz_list =[]
+bestxyz_list =[]
+bestpos_list =[]
+
+#rozdzielam obserwacje na 4 listy
+
+with open (path_pomiar, 'r') as pomiar:
+    pomiar_list=pomiar.readlines()
+
+n = len(pomiar_list)
+
+for i in range (n):
+    pomiar_list[i]=re.split(r'[,;*]+', pomiar_list[i])
+    if (pomiar_list[i][0] == '#RANGEA'):
+        rangea_list.append(pomiar_list[i])
+    elif (pomiar_list[i][0] == '#SATXYZ2A'):
+        satxyz_list.append(pomiar_list[i])
+    elif (pomiar_list[i][0] == '#BESTPOSA'):
+        bestpos_list.append(pomiar_list[i])
+    elif (pomiar_list[i][0] == '#BESTXYZA'):
+        bestxyz_list.append(pomiar_list[i])
+
+# usuniecie obserwacji niepelnych
+
+i = 0
+r=len(rangea_list)
+s=len(satxyz_list)
+bp=len(bestpos_list)
+bx=len(bestxyz_list)
+#print(r,s,bp,bx)
+while i<min(r,s,bp,bx):
+    if not (rangea_list[i][6] == satxyz_list[i][6] == bestpos_list[i][6] == bestxyz_list[i][6]):
+        minim = min(rangea_list[i][6] , satxyz_list[i][6] , bestpos_list[i][6] , bestxyz_list[i][6])
+        if rangea_list[i][6] == minim :
+            rangea_list.pop(i)
+            r-=1
+        if satxyz_list[i][6] == minim:
+            satxyz_list.pop(i)
+            s-=1
+        if bestpos_list[i][6] == minim:
+            bestpos_list.pop(i)
+            bp-=1
+        if bestxyz_list[i][6] == minim:
+            bestxyz_list.pop(i)
+            bx-=1
+        
+    elif rangea_list[i][6] == satxyz_list[i][6] == bestpos_list[i][6] == bestxyz_list[i][6]:
+        i+=1
+rangea_list = rangea_list[:min(r,s,bp,bx)]
+satxyz_list = satxyz_list[:min(r,s,bp,bx)]
+bestpos_list = bestpos_list[:min(r,s,bp,bx)]
+bestxyz_list = bestxyz_list[:min(r,s,bp,bx)]
+        
+
+"""with open ('rangea.txt', 'w') as rangea: # zeby wyswietlic rozdzielone komendy
+    v = len(rangea_list) #liczba wersow
+    for i in range (v):
+        e = len(rangea_list[i]) #ile dany wers ma elementow
+        for j in range (e):
+            rangea.write(rangea_list[i][j]+' ')
+        
+with open ('satxyz.txt', 'w') as satxyz:
+    v = len(satxyz_list) #liczba wersow
+    for i in range (v):
+        e = len(satxyz_list[i]) #ile dany wers ma elementow
+        for j in range (e):
+            satxyz.write(satxyz_list[i][j]+' ')
+
+with open ('bestpos.txt', 'w') as bestpos:
+    v = len(bestpos_list) #liczba wersow
+    for i in range (v):
+        e = len(bestpos_list[i]) #ile dany wers ma elementow
+        for j in range (e):
+            bestpos.write(bestpos_list[i][j]+' ')
+
+with open ('bestxyz.txt', 'w') as bestxyz:
+    v = len(bestxyz_list) #liczba wersow
+    for i in range (v):
+        e = len(bestxyz_list[i]) #ile dany wers ma elementow
+        for j in range (e):
+            bestxyz.write(bestxyz_list[i][j]+' ')"""
+
+# stworzenie i nazwanie wiekszosci zmiennych
+
+x=[] # lista xj (t) dla danego pomiaru
+y=[] # lista yj (t)
+z=[] # lista zj (t)
+
+c=299792458. # predkosc rozchodzenia sie fali elektromagnetycznej
+    # bliska predkosci swiatla w prozni
+    # w [m/s]
+
+x0=0. # x(i0) - zmienia sie w kolejnych iteracjach
+y0=0.
+z0=0.
+
+dx=0. #przyrost do x0
+dy=0.
+dz=0.
+
+ro0=[] # ro(i0) (t) - odl geometryczna + poprawki
+ro=[] # ro(i) (t) - psr z komendy rangea
+
+dti=0.
+ti=0. # poprawka zegara odbiornika
+
+A = np.empty((0,4), float) # Tworze macierz wypelniona zerami,
+                        #o wymiarach 0x4 (pusta macierz),
+                        #przechowujaca float,
+                        #ktora pozniej bede rozszerzac
+
+L = np.empty((0,1), float)
+d=[] # rzeczywista odeglosc geometryczna
+clk=[] # lista poprawek zegara satelitow (dla kazdego satelity z pomiaru)
+ion=[] # lista poprawek jonosferycznych
+trop=[] # lista poprawek troposferycznych
+system=[]
+sat_nr_list=[]
+
+# zamiana numerow satelitow GLONASS
+
+psodl = open('pseudoodleglosci.txt', 'a') # pliki zostana automatycznie utworzone w folderze,
+rozw = open('rozwiazania.txt', 'a')				# w ktorym zapisany jest algorytm
+#numery = open('numery.txt', 'a')
+#best = open('best.txt', 'a')
+
+n=len(rangea_list)
+for i in range (n):
+    sat=int(satxyz_list[i][10])  # liczba satelitow
+    sat1=int(rangea_list[i][10])
+    for j in range (sat):
+        sat_nr=satxyz_list[i][12+j*10]
+        #print(sat_nr)
+        if (satxyz_list[i][11+j*10] == 'GLONASS'):
+           system.append('GLONASS')
+           if not (sat_nr[-2] == '-' or sat_nr[-2] == '+'):
+                sat_nr_list.append(int(sat_nr)+37)
+           elif (sat_nr[-2] == '+' or sat_nr[-2] == '-'):
+                sat_nr_list.append(int(sat_nr[: -2])+37)
+        elif(satxyz_list[i][11+j*10] == 'GPS'):
+            system.append('GPS')
+            sat_nr_list.append(int(sat_nr))
+                
+        # wczytanie danych z danej obserwacji do listy zmiennych
+        
+        x.append(float(satxyz_list[i][13+j*10]))
+        y.append(float(satxyz_list[i][14+j*10]))
+        z.append(float(satxyz_list[i][15+j*10]))
+        clk.append(float(satxyz_list[i][16+j*10])) # poprawka zegara satelity [m]
+        ion.append(float(satxyz_list[i][17+j*10])) # poprawka jonosferyczna [m]
+        trop.append(float(satxyz_list[i][18+j*10])) # poprawka troposferyczna [m]
+
+    # usuniecie satelitow z wiadomosci RANGEA, ktorych nie ma w wiadomosciach SATXYZ
+
+    j=0
+    while j<sat1:
+        sat_nr=int(rangea_list[i][11+j*10])
+        if j>len(sat_nr_list)-1:
+            #numery.write(str(i)+' '+str(sat_nr)+'\n')
+            for k in range (10):
+                rangea_list[i].pop(11+j*10)
+            sat1-=1
+            rangea_list[i][10]=str(int(rangea_list[i][10])-1)
+        elif (sat_nr_list[j] == sat_nr) == False:
+            #numery.write(str(i)+' '+str(sat_nr)+'\n')
+            for k in range (10):
+                rangea_list[i].pop(11+j*10)
+            sat1-=1
+            rangea_list[i][10]=str(int(rangea_list[i][10])-1)
+        elif (sat_nr_list[j] == sat_nr):
+            j+=1
+
+    if not (rangea_list[i][10] == satxyz_list[i][10]):
+        print('Blad - Liczba satelitow jest rozna w dwoch zapisach wiadomosci.')
+
+    # obliczenia do wyznaczenia rozwiazania nawigacyjnego
+    
+    for k in range (10): #liczba iteracji
+        for j in range (sat):
+            #(9)
+            ro0.append(math.sqrt((x[j]-x0)*(x[j]-x0) + (y[j]-y0)*(y[j]-y0) + (z[j]-z0)*(z[j]-z0)))
+
+            #(12)
+            ro.append(float(rangea_list[i][13+10*j]))
+            d.append(math.sqrt((x[j]-3714859.991)*(x[j]-3714859.991) + (y[j]-1464445.836)*(y[j]-1464445.836) + (z[j]-4957031.231)*(z[j]-4957031.231)))
+
+            psodl.write(str(i)+' '+satxyz_list[i][6]+' '+system[j]+' '+str(sat_nr_list[j])+' '+str(ro[j])+' '+str(d[j])+' '+str(ro[j]-d[j])+'\n')
+            #if (system[j]=='GPS'):
+                #psodl.write(str(i)+' '+satxyz_list[i][6]+' '+system[j]+' '+str(sat_nr_list[j])+' '+str(ro[j])+' '+str(d[j])+' '+str(ro[j]-d[j])+'\n')
+            #if (system[j]=='GLONASS'):
+                #psodl.write(str(i)+' '+satxyz_list[i][6]+' '+system[j]+' '+str(sat_nr_list[j])+' '+str(ro[j])+' '+str(d[j])+' '+str(ro[j]-d[j])+'\n')
+
+            #(24)
+            A = np.append(A, np.array([[-(x[j]-x0)/ro0[j] , -(y[j]-y0)/ro0[j] , -(z[j]-z0)/ro0[j] , c]]), axis=0)
+            #(25)
+            L = np.append(L, np.array([[ro[j]-ro0[j]]]), axis=0)
+            
+        #(23)
+        X = np.linalg.inv(A.T.dot(A)).dot(A.T).dot(L) # wykorzystuje odwrotnosc macierzy kwadratowej
+        
+        #X = np.linalg.pinv(A).dot(L) # wykorzystuje pseudoodwrotnosc Moore'a-Penrose'a
+        
+        #X=np.linalg.lstsq(A,L) # metoda najmniejszych kwadratow w Pythonie
+        #print(X)
+                       
+        dx=X[0][0] # przy wykorzystaniu lstsq wymaga dx=X[0][0][0]
+        dy=X[1][0] # przy wykorzystaniu lstsq wymaga dy=X[0][1][0]
+        dz=X[2][0]
+        dti=X[3][0]
+        x0+=dx
+        y0+=dy
+        z0+=dz
+        ti+=dti
+        ro0=[]
+        ro=[]
+        d=[]
+        A = np.empty((0,4), float)
+        L = np.empty((0,1), float)
+        
+        #rozw.write(str(i)+' '+str(k)+' '+str(3714859.991-x0)+' '+str(1464445.836-y0)+' '+str(4957031.231-z0)+' '+str(ti)+'\n')
+        
+    # czyszcze wszystkie zmienne do nastepnej obserwacji
+
+    rozw.write(str(i)+' '+str(x0)+' '+str(y0)+' '+str(z0)+' '+str(ti)+'\n')
+    #rozw.write(str(i)+' '+str(3714859.991-x0)+' '+str(1464445.836-y0)+' '+str(4957031.231-z0)+' '+str(ti)+'\n')
+    #best.write(str(i)+' '+bestxyz_list[i][12]+' '+bestxyz_list[i][13]+' '+bestxyz_list[i][14]+'\n')
+  
+    x=[]
+    y=[]
+    z=[]
+    x0=0.
+    y0=0.
+    z0=0.
+    ti=0.
+    clk=[]
+    ion=[]
+    trop=[]
+    system=[]
+    sat_nr_list=[]
+
+
+psodl.close()
+rozw.close()
+#numery.close()
+#best.close()
