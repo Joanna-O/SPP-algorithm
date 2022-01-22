@@ -189,7 +189,7 @@ for i in range (n):
             ro0.append(math.sqrt((x[j]-x0)*(x[j]-x0) + (y[j]-y0)*(y[j]-y0) + (z[j]-z0)*(z[j]-z0)))
 
             #(12)
-            ro.append(float(rangea_list[i][13+10*j]))
+            ro.append(float(rangea_list[i][13+10*j]) + clk[j] - ion[j] - trop[j] - ti)
             d.append(math.sqrt((x[j]-3714859.991)*(x[j]-3714859.991) + (y[j]-1464445.836)*(y[j]-1464445.836) + (z[j]-4957031.231)*(z[j]-4957031.231)))
 
             psodl.write(str(i)+' '+satxyz_list[i][6]+' '+system[j]+' '+str(sat_nr_list[j])+' '+str(ro[j])+' '+str(d[j])+' '+str(ro[j]-d[j])+'\n')
